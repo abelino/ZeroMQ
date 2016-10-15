@@ -47,9 +47,9 @@ public struct ReceiveMode : OptionSet {
 }
 
 public final class Socket {
-    let socket: UnsafeMutablePointer<Void>
+    let socket: UnsafeMutableRawPointer
 
-    init(socket: UnsafeMutablePointer<Void>) {
+    init(socket: UnsafeMutableRawPointer) {
         self.socket = socket
     }
 
@@ -57,31 +57,31 @@ public final class Socket {
         zmq_close(socket)
     }
 
-    func setOption(_ option: Int32, value: UnsafePointer<Void>?, length: Int) throws {
+    func setOption(_ option: Int32, value: UnsafeRawPointer?, length: Int) throws {
         if zmq_setsockopt(socket, option, value, length) == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
     }
 
-    func getOption(_ option: Int32, value: UnsafeMutablePointer<Void>, length: UnsafeMutablePointer<Int>) throws {
+    func getOption(_ option: Int32, value: UnsafeMutableRawPointer, length: UnsafeMutablePointer<Int>) throws {
         if zmq_getsockopt(socket, option, value, length) == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
     }
 
-    public func bind(_ endpoint: String) throws {
+    public func bind(to endpoint: String) throws {
         if zmq_bind(socket, endpoint) == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
     }
 
-    public func connect(_ endpoint: String) throws {
+    public func connect(to endpoint: String) throws {
         if zmq_connect(socket, endpoint) == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
     }
 
-    public func sendMessage(_ message: Message, mode: SendMode = []) throws -> Bool {
+    public func send(_ message: Message, mode: SendMode = []) throws -> Bool {
         let result = zmq_msg_send(&message.message, socket, Int32(mode.rawValue))
 
         if result == -1 && zmq_errno() == EAGAIN {
@@ -89,13 +89,13 @@ public final class Socket {
         }
 
         if result == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
 
         return true
     }
 
-    func send(_ buffer: UnsafeMutablePointer<Void>, length: Int, mode: SendMode = []) throws -> Bool {
+    func send(_ buffer: UnsafeMutableRawPointer, length: Int, mode: SendMode = []) throws -> Bool {
         let result = zmq_send(socket, buffer, length, Int32(mode.rawValue))
 
         if result == -1 && zmq_errno() == EAGAIN {
@@ -103,17 +103,18 @@ public final class Socket {
         }
 
         if result == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
 
         return true
     }
+
     public func send(_ data: Data, mode: SendMode = []) throws -> Bool {
         var data = data
         return try self.send(&data.bytes, length: data.count, mode: mode)
     }
 
-    func sendImmutable(_ buffer: UnsafePointer<Void>, length: Int, mode: SendMode = []) throws -> Bool {
+    func sendImmutable(_ buffer: UnsafeRawPointer, length: Int, mode: SendMode = []) throws -> Bool {
         let result = zmq_send_const(socket, buffer, length, Int32(mode.rawValue))
 
         if result == -1 && zmq_errno() == EAGAIN {
@@ -121,7 +122,7 @@ public final class Socket {
         }
 
         if result == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
 
         return true
@@ -136,7 +137,7 @@ public final class Socket {
         }
 
         if result == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
 
         return message
@@ -150,7 +151,7 @@ public final class Socket {
         }
 
         if result == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
         let bufferEnd = min(Int(result), bufferSize)
         return Data(data[0 ..< bufferEnd])
@@ -158,13 +159,13 @@ public final class Socket {
 
     public func close() throws {
         if zmq_close(socket) == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
     }
 
     public func monitor(_ endpoint: String, events: SocketEvent) throws {
         if zmq_socket_monitor(socket, endpoint, events.rawValue) == -1 {
-            throw Error.lastError
+            throw ZeroMqError.lastError
         }
     }
 }
@@ -193,11 +194,11 @@ public struct SocketEvent : OptionSet {
 extension Socket {
     func setOption(_ option: Int32, _ value: Bool) throws {
         var value = value ? 1 : 0
-        try setOption(option, value: &value, length: strideof(Int32))
+        try setOption(option, value: &value, length: MemoryLayout<Int32>.size)
     }
     func setOption(_ option: Int32, _ value: Int32) throws {
         var value = value
-        try setOption(option, value: &value, length: strideof(Int32))
+        try setOption(option, value: &value, length: MemoryLayout<Int32>.size)
     }
     func setOption(_ option: Int32, _ value: String) throws {
         try value.withCString { v in
@@ -221,7 +222,7 @@ extension Socket {
 extension Socket {
     public func setAffinity(_ value: UInt64) throws {
         var value = value
-        try setOption(ZMQ_AFFINITY, value: &value, length: strideof(UInt64))
+        try setOption(ZMQ_AFFINITY, value: &value, length: MemoryLayout<UInt64>.size)
     }
 
     public func setBacklog(_ value: Int32) throws {
@@ -310,7 +311,7 @@ extension Socket {
 
     public func setMaxMessageSize(_ value: Int64) throws {
         var value = value
-        try setOption(ZMQ_MAXMSGSIZE, value: &value, length: strideof(Int64))
+        try setOption(ZMQ_MAXMSGSIZE, value: &value, length: MemoryLayout<Int64>.size)
     }
 
     public func setMulticastHops(_ value: Int32) throws {
@@ -457,7 +458,7 @@ extension Socket {
 extension Socket {
     func getOption(_ option: Int32) throws -> Int32 {
         var value: Int32 = 0
-        var length = strideof(Int32)
+        var length = MemoryLayout<Int32>.size
         try getOption(option, value: &value, length: &length)
         return value
     }
@@ -476,7 +477,7 @@ extension Socket {
 extension Socket {
     public func getAffinity() throws -> UInt64 {
         var value: UInt64 = 0
-        var length = strideof(UInt64)
+        var length = MemoryLayout<Int64>.size
         try getOption(ZMQ_AFFINITY, value: &value, length: &length)
         return value
     }
@@ -560,7 +561,7 @@ extension Socket {
 
     public func getMaxMessageSize() throws -> Int64 {
         var value: Int64 = 0
-        var length = strideof(Int64)
+        var length = MemoryLayout<Int64>.size
         try getOption(ZMQ_MAXMSGSIZE, value: &value, length: &length)
         return value
     }
@@ -672,17 +673,17 @@ extension Socket {
 }
 
 public enum SecurityMechanism {
-    case Null
-    case Plain
-    case CURVE
+    case null
+    case plain
+    case curve
 }
 
 extension SecurityMechanism {
     init?(rawValue: Int32) {
         switch rawValue {
-        case ZMQ_NULL: self = Null
-        case ZMQ_PLAIN: self = Plain
-        case ZMQ_CURVE: self = CURVE
+        case ZMQ_NULL: self = .null
+        case ZMQ_PLAIN: self = .plain
+        case ZMQ_CURVE: self = .curve
         default: return nil
         }
     }

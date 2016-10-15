@@ -25,52 +25,52 @@
 import CZeroMQ
 
 public struct PollEvent : OptionSet {
-    public let rawValue: Int16
+  public let rawValue: Int16
 
-    public init(rawValue: Int16) {
-        self.rawValue = rawValue
-    }
+  public init(rawValue: Int16) {
+    self.rawValue = rawValue
+  }
 
-    public static let In       = PollEvent(rawValue: Int16(ZMQ_POLLIN))
-    public static let Out      = PollEvent(rawValue: Int16(ZMQ_POLLOUT))
-    public static let Error    = PollEvent(rawValue: Int16(ZMQ_POLLERR))
-    // public static let Priority = PollEvent(rawValue: Int16(ZMQ_POLLPRI))
+  public static let In       = PollEvent(rawValue: Int16(ZMQ_POLLIN))
+  public static let Out      = PollEvent(rawValue: Int16(ZMQ_POLLOUT))
+  public static let Error    = PollEvent(rawValue: Int16(ZMQ_POLLERR))
+  // public static let Priority = PollEvent(rawValue: Int16(ZMQ_POLLPRI))
 }
 
 public enum PollItemEvent {
-    case Socket(socket: UnsafeMutablePointer<Void>, events: PollEvent)
-    case FileDescriptor(fileDescriptor: Int32, events: PollEvent)
+  case socket(socket: UnsafeMutableRawPointer, events: PollEvent)
+  case fileDescriptor(fileDescriptor: Int32, events: PollEvent)
 
-    var pollItem: zmq_pollitem_t {
-        switch self {
-        case Socket(let socket, let events):
-            return zmq_pollitem_t(socket: socket, fd: 0, events: events.rawValue, revents: 0)
-        case FileDescriptor(let fileDescriptor, let events):
-            return zmq_pollitem_t(socket: nil, fd: fileDescriptor, events: events.rawValue, revents: 0)
-        }
+  var pollItem: zmq_pollitem_t {
+    switch self {
+    case .socket(let socket, let events):
+      return zmq_pollitem_t(socket: socket, fd: 0, events: events.rawValue, revents: 0)
+    case .fileDescriptor(let fileDescriptor, let events):
+      return zmq_pollitem_t(socket: nil, fd: fileDescriptor, events: events.rawValue, revents: 0)
     }
+  }
 
-    init(pollItem: zmq_pollitem_t) {
-        if pollItem.socket != nil {
-            self = Socket(
-                socket: pollItem.socket,
-                events: PollEvent(rawValue: pollItem.revents)
-            )
-        } else {
-            self = FileDescriptor(
-                fileDescriptor: pollItem.fd,
-                events: PollEvent(rawValue: pollItem.revents)
-            )
-        }
+  init(pollItem: zmq_pollitem_t) {
+    if pollItem.socket != nil {
+      self = .socket(
+        socket: pollItem.socket,
+        events: PollEvent(rawValue: pollItem.revents)
+      )
+    } else {
+      self = .fileDescriptor(
+        fileDescriptor: pollItem.fd,
+        events: PollEvent(rawValue: pollItem.revents)
+      )
     }
+  }
 }
 
 public func poll(_ items: PollItemEvent..., timeout: Int) throws -> [PollItemEvent] {
-    var pollItems = items.map { $0.pollItem }
+  var pollItems = items.map { $0.pollItem }
 
-    if zmq_poll(&pollItems, Int32(pollItems.count), timeout) == -1 {
-        throw Error.lastError
-    }
+  if zmq_poll(&pollItems, Int32(pollItems.count), timeout) == -1 {
+    throw ZeroMqError.lastError
+  }
 
-    return pollItems.map(PollItemEvent.init)
+  return pollItems.map(PollItemEvent.init)
 }
